@@ -18,7 +18,6 @@ type DatabaseClient struct {
 }
 
 func NewDatabaseClient() *DatabaseClient {
-	slog.Info("Initializing...")
 	dotEnvErr := godotenv.Load()
 	if dotEnvErr != nil {
 		slog.Error("Error loading .env file, exiting")
