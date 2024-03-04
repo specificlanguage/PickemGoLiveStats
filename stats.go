@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/redis/go-redis/v9"
 	"log/slog"
 	"strconv"
 )
@@ -95,6 +96,11 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 
 func handleScheduledGame(gameStats map[string]interface{}, client *DatabaseClient) error {
 
+	// Check if game is already in database, so we don't reassign anything.
+	client.redisMut.Lock()
+
+	client.redisMut.Unlock()
+
 	datetime, datetimeErr := unwrap(gameStats, "datetime")
 	if datetimeErr != nil {
 		return datetimeErr
@@ -114,16 +120,31 @@ func handleScheduledGame(gameStats map[string]interface{}, client *DatabaseClien
 	// Write to redis
 	client.redisMut.Lock()
 	defer client.redisMut.Unlock()
-	rdErr := client.redisClient.HSet(
+
+	_, getRedisErr := client.redisClient.HGet(
 		context.Background(),
 		"game:"+strconv.Itoa(scheduledGameStats.GameID),
-		scheduledGameStats,
-	).Err()
-	if rdErr != nil {
-		return rdErr
+		"status").Result()
+
+	if getRedisErr == redis.Nil { // Could not be found, try writing
+		rdErr := client.redisClient.HSet(
+			context.Background(),
+			"game:"+strconv.Itoa(scheduledGameStats.GameID),
+			scheduledGameStats,
+		).Err()
+		if rdErr != nil {
+			return rdErr
+		}
+		slog.Info("Game " + strconv.Itoa(scheduledGameStats.GameID) + " written to database")
+		return nil
+	} else if getRedisErr != nil { // Error, return
+		return getRedisErr
+	} else { // Found, do nothing
+		slog.Info("Game " + strconv.Itoa(scheduledGameStats.GameID) + " already in database")
+		return nil
 	}
+}
 
-	slog.Info("Wrote to database")
-
+func handleInProgressGame(gameStats map[string]interface{}, client *DatabaseClient) error {
 	return nil
 }
