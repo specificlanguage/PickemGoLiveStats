@@ -50,34 +50,38 @@ type UnknownGameStats struct {
 	gameID int
 }
 
-func handleGameStats(gameID int, dbClient *DatabaseClient) error {
+// Returns true or false if the game that was just handled was finished.
+func handleGameStats(gameID int, dbClient *DatabaseClient) (bool, error) {
 	gameResp, err := getGameData(gameID)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	gameStats, err := getGameStats(gameResp)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	liveStats, err := getLiveStats(gameResp)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	gameType, err := getGameType(gameStats)
 	switch gameType {
 
 	case Scheduled:
-		return handleScheduledGame(gameStats, dbClient)
+		err := handleScheduledGame(gameStats, dbClient)
+		return false, err
 	case Completed:
-		return handleFinishedGame(gameStats, liveStats, dbClient)
+		err := handleFinishedGame(gameStats, liveStats, dbClient)
+		return true, err
 	case InProgress:
-		return handleInProgressGame(gameStats, liveStats, dbClient)
+		err := handleInProgressGame(gameStats, liveStats, dbClient)
+		return false, err
 	}
 
-	return nil
+	return false, nil
 }
 
 func getGameType(gameStats map[string]interface{}) (string, error) {
@@ -94,6 +98,8 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 	case "S":
 		return Scheduled, nil
 	case "F":
+		return Completed, nil
+	case "O":
 		return Completed, nil
 	case "I":
 		return InProgress, nil
