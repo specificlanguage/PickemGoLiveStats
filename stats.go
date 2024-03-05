@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/redis/go-redis/v9"
 	"log/slog"
 	"strconv"
@@ -367,11 +366,11 @@ func setFinalScoreRedis(stats CompletedGameStats, client *DatabaseClient) error 
 	client.redisMut.Lock()
 	defer client.redisMut.Unlock()
 
-	item, merr := json.Marshal(stats)
-	if merr != nil {
-		return merr
-	}
-	slog.Info(string(item))
+	//item, merr := json.Marshal(stats)
+	//if merr != nil {
+	//	return merr
+	//}
+	//slog.Info(string(item))
 
 	hsetErr := client.redisClient.HSet(
 		context.Background(),
@@ -396,7 +395,23 @@ func setFinalScoreRedis(stats CompletedGameStats, client *DatabaseClient) error 
 func setFinalScoreDB(stats CompletedGameStats, client *DatabaseClient) error {
 	client.dbMut.Lock()
 	defer client.dbMut.Unlock()
-	_, err := client.db.Query(context.Background(), `
+	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	tx, err := client.db.Begin(cctx)
+
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback(context.Background())
+		} else {
+			tx.Commit(context.Background())
+		}
+	}()
+
+	_, err = client.db.Exec(cctx, `
 			UPDATE games SET finished=$1, home_score=$2, away_score=$3,
 			winner = (
 			    CASE WHEN home_score > away_score THEN "homeTeam_id"
@@ -406,5 +421,22 @@ func setFinalScoreDB(stats CompletedGameStats, client *DatabaseClient) error {
 			)
  			WHERE id = $4`,
 		true, stats.HomeScore, stats.AwayScore, stats.GameID)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = client.db.Exec(cctx, `
+		UPDATE picks set correct=
+		 (CASE WHEN "pickedHome" = 
+			(SELECT winner = "homeTeam_id" from games where id = $1 and winner IS NOT NULL) 
+		  THEN true 
+		 ELSE false END) WHERE game_id = $1`, stats.GameID)
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(context.Background())
 	return err
 }

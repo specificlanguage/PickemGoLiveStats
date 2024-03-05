@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"github.com/jackc/pgtype"
-	_ "github.com/jackc/pgx/v4/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"log/slog"
 	"os"
 	"strconv"
@@ -59,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var games []Game = make([]Game, 0)
+	var games = make([]Game, 0)
 
 	for rows.Next() {
 		var game Game
@@ -78,6 +78,7 @@ func main() {
 	for _, game := range games {
 		universalWait.Add(1)
 		go StatsJob(game.ID, universalWait)
+		time.Sleep(500 * time.Millisecond) // Just to space things out a little.
 	}
 	universalWait.Wait()
 	slog.Info("All games for today have been processed, exiting...")

@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"log/slog"
@@ -28,7 +28,7 @@ func NewDatabaseClient() *DatabaseClient {
 	connStr := os.Getenv("DATABASE_URL")
 	slog.Debug(connStr)
 
-	sqlDB, dbErr := pgxpool.Connect(context.Background(), connStr)
+	sqlDB, dbErr := pgxpool.New(context.Background(), connStr)
 	if dbErr != nil {
 		slog.Error(dbErr.Error())
 		slog.Error("Error connecting to database, exiting")
