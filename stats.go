@@ -91,16 +91,18 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 		return "", gameStatusErr
 	}
 
-	code := gameStatus["codedGameState"].(string)
+	code := gameStatus["statusCode"].(string)
 
 	switch code {
-	case "S":
+	case "S": // Scheduled
 		return Scheduled, nil
-	case "F":
+	case "PW": // Warmup situation
+		return Scheduled, nil
+	case "F": // Final
 		return Completed, nil
-	case "O":
+	case "O": // Game Over (used as separate before decisions)
 		return Completed, nil
-	case "I":
+	case "I": // In Progress
 		return InProgress, nil
 	default:
 		return Unknown, nil
