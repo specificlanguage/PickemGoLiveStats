@@ -20,4 +20,9 @@ func main() {
 		slog.Error(err.Error())
 	}
 
+	finErr := handleGameStats(716643, databaseClient)
+	if finErr != nil {
+		slog.Error(finErr.Error())
+	}
+
 }
