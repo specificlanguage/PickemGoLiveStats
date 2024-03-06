@@ -1,3 +1,4 @@
+
 name: Deploy to ECR
 run-name: Run ${{ github.run_id }} deploying to ECR
 on:
@@ -13,7 +14,7 @@ env:
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   CONTAINER_NAME: "pickem"
   ECS_SERVICE: PickemLiveStats
-  ECS_CLUSTER: PickemLiveStats-Dev
+  ECS_CLUSTER: PickemLiveStats-Prod
 
 
 jobs:
