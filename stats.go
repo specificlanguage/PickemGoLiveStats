@@ -103,6 +103,8 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 		return Scheduled, nil // Pregame
 	case "PW": // Warmup situation
 		return Scheduled, nil
+	case "DR":
+		return Completed, nil // Delayed/Postponed
 	case "F": // Final
 		return Completed, nil
 	case "O": // Game Over (used as separate before decisions)
@@ -277,7 +279,6 @@ func handleUnknownGame(gameStats map[string]interface{}, client *DatabaseClient)
 	if hsetErr != nil {
 		return hsetErr
 	}
-	client.redisMut.Unlock()
 
 	return nil
 }
