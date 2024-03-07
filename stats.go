@@ -45,8 +45,8 @@ type CompletedGameStats struct {
 }
 
 type UnknownGameStats struct {
-	status string
-	gameID int
+	status string `redis:"status"`
+	gameID int    `redis:"gameID"`
 }
 
 // Returns true or false if the game that was just handled was finished.
@@ -78,6 +78,9 @@ func handleGameStats(gameID int, dbClient *DatabaseClient) (bool, error) {
 	case InProgress:
 		err := handleInProgressGame(gameStats, liveStats, dbClient)
 		return false, err
+	case Unknown:
+		err := handleUnknownGame(gameStats, dbClient)
+		return true, err
 	}
 
 	return false, nil
@@ -96,6 +99,8 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 	switch code {
 	case "S": // Scheduled
 		return Scheduled, nil
+	case "P":
+		return Scheduled, nil // Pregame
 	case "PW": // Warmup situation
 		return Scheduled, nil
 	case "F": // Final
@@ -252,6 +257,29 @@ func handleInProgressGame(gameStats map[string]interface{}, liveStats map[string
 
 	return nil
 
+}
+
+func handleUnknownGame(gameStats map[string]interface{}, client *DatabaseClient) error {
+	slog.Info("Game status unknown, setting in database and skipping")
+
+	gameID, gameIDErr := unwrap(gameStats, "game")
+	if gameIDErr != nil {
+		return gameIDErr
+	}
+	unknownGameInfo := UnknownGameStats{
+		status: Unknown,
+		gameID: int(gameID["pk"].(float64)),
+	}
+
+	client.redisMut.Lock()
+	defer client.redisMut.Unlock()
+	hsetErr := client.redisClient.HSet(context.Background(), "game:"+strconv.Itoa(unknownGameInfo.gameID), unknownGameInfo).Err()
+	if hsetErr != nil {
+		return hsetErr
+	}
+	client.redisMut.Unlock()
+
+	return nil
 }
 
 func getScores(liveData map[string]interface{}) (int, int, error) {
