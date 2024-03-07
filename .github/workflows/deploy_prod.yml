@@ -13,8 +13,6 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   CONTAINER_NAME: "pickem"
-  ECS_SERVICE: PickemLiveStats
-  ECS_CLUSTER: PickemLiveStats-Prod
 
 
 jobs:
@@ -56,14 +54,3 @@ jobs:
           task-definition: .aws/task-definition.json
           container-name: my-container
           image: ${{ steps.build-image.outputs.image }}
-
-
-      - name: Deploy ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.fill-task-def.outputs.new-task-definition }}
-          service: my-service
-          cluster: my-cluster
-          wait-for-service-stability: true
-
-
