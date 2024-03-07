@@ -11,9 +11,7 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-  DATABASE_URL: ${{ secrets.DATABASE_URL }}
-  REDIS_URL: ${{ secrets.REDIS_URL }}
-  CONTAINER_NAME: "pickem-livestats"
+  CONTAINER_NAME: "pickem"
   ECS_SERVICE: PickemLiveStats
   ECS_CLUSTER: PickemLiveStats-Dev
 
