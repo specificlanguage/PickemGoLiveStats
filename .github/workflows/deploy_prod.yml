@@ -13,6 +13,7 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   CONTAINER_NAME: "pickem"
+  ECS_CLUSTER: PickemLiveStats-Prod
 
 
 jobs:

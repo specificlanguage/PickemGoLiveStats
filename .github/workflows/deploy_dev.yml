@@ -12,6 +12,7 @@ env:
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   CONTAINER_NAME: "pickem"
+  ECS_CLUSTER: PickemLiveStats-Dev
 
 
 jobs:
@@ -54,4 +55,8 @@ jobs:
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
 
-
+      - name: Deploy to Amazon ECS
+        uses: airfordable/ecs-deploy-task-definition-to-scheduled-task@v2.0.0
+        with:
+          cluster: ${{ env.ECS_CLUSTER }}
+          task-definition: ${{ steps.fill-task-def.outputs.task-definition }}
