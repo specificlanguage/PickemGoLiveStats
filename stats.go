@@ -13,6 +13,7 @@ const (
 	Scheduled  = "SCHEDULED"
 	InProgress = "IN_PROGRESS"
 	Completed  = "COMPLETED"
+	Postponed  = "POSTPONED"
 	Unknown    = "UNKNOWN"
 )
 
@@ -49,6 +50,13 @@ type UnknownGameStats struct {
 	gameID int    `redis:"gameID"`
 }
 
+type PostponedGameStats struct {
+	Status    string `redis:"status"`
+	GameID    int    `redis:"gameID"`
+	HomeScore int    `redis:"homeScore"`
+	AwayScore int    `redis:"awayScore"`
+}
+
 // Returns true or false if the game that was just handled was finished.
 func handleGameStats(gameID int, dbClient *DatabaseClient) (bool, error) {
 	gameResp, err := getGameData(gameID)
@@ -79,7 +87,7 @@ func handleGameStats(gameID int, dbClient *DatabaseClient) (bool, error) {
 		err := handleInProgressGame(gameStats, liveStats, dbClient)
 		return false, err
 	case Unknown:
-		err := handleUnknownGame(gameStats, dbClient)
+		err := handlePostponedGame(gameStats, liveStats, dbClient)
 		return true, err
 	}
 
@@ -104,7 +112,7 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 	case "PW": // Warmup situation
 		return Scheduled, nil
 	case "DR":
-		return Completed, nil // Delayed/Postponed
+		return Postponed, nil // Delayed/Postponed
 	case "F": // Final
 		return Completed, nil
 	case "O": // Game Over (used as separate before decisions)
@@ -261,24 +269,62 @@ func handleInProgressGame(gameStats map[string]interface{}, liveStats map[string
 
 }
 
-func handleUnknownGame(gameStats map[string]interface{}, client *DatabaseClient) error {
+func handlePostponedGame(gameStats map[string]interface{}, liveStats map[string]interface{}, client *DatabaseClient) error {
 	slog.Info("Game status unknown, setting in database and skipping")
 
 	gameID, gameIDErr := unwrap(gameStats, "game")
 	if gameIDErr != nil {
 		return gameIDErr
 	}
-	unknownGameInfo := UnknownGameStats{
-		status: Unknown,
-		gameID: int(gameID["pk"].(float64)),
+
+	homeScore, awayScore, scoreErr := getScores(liveStats)
+	if scoreErr != nil {
+		return scoreErr
+	}
+
+	stats := PostponedGameStats{
+		Status:    Postponed,
+		GameID:    int(gameID["pk"].(float64)),
+		HomeScore: homeScore,
+		AwayScore: awayScore,
 	}
 
 	client.redisMut.Lock()
 	defer client.redisMut.Unlock()
-	hsetErr := client.redisClient.HSet(context.Background(), "game:"+strconv.Itoa(unknownGameInfo.gameID), unknownGameInfo).Err()
+	hsetErr := client.redisClient.HSet(context.Background(), "game:"+strconv.Itoa(stats.GameID), stats).Err()
 	if hsetErr != nil {
 		return hsetErr
 	}
+
+	client.dbMut.Lock()
+	defer client.dbMut.Unlock()
+	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	tx, err := client.db.Begin(cctx)
+
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback(context.Background())
+		} else {
+			tx.Commit(context.Background())
+		}
+	}()
+
+	_, err = client.db.Exec(cctx, `
+			UPDATE games SET finished=$1, home_score=$2, away_score=$3, winner = NULL
+ 			WHERE id = $4`,
+		true, stats.HomeScore, stats.AwayScore, stats.GameID)
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(context.Background())
+	return err
 
 	return nil
 }
