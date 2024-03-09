@@ -3,16 +3,15 @@ run-name: Run ${{ github.run_id }} deploying to ECR
 on:
   push:
     branches:
-      - main
+      - dev
 
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  ECR_REPO: ${{ secrets.ECR_REPO }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
   CONTAINER_NAME: "pickem"
-  ECS_SERVICE: PickemLiveStats
   ECS_CLUSTER: PickemLiveStats-Dev
 
 
@@ -41,7 +40,7 @@ jobs:
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPO }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
@@ -53,16 +52,11 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: .aws/task-definition.json
-          container-name: my-container
+          container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
 
-
-      - name: Deploy ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      - name: Deploy to Amazon ECS
+        uses: airfordable/ecs-deploy-task-definition-to-scheduled-task@v2.0.0
         with:
-          task-definition: ${{ steps.fill-task-def.outputs.new-task-definition }}
-          service: my-service
-          cluster: my-cluster
-          wait-for-service-stability: true
-
-
+          cluster: ${{ env.ECS_CLUSTER }}
+          task-definition: ${{ steps.fill-task-def.outputs.task-definition }}

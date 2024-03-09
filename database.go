@@ -18,11 +18,11 @@ type DatabaseClient struct {
 }
 
 func NewDatabaseClient() *DatabaseClient {
-	dotEnvErr := godotenv.Load()
-	if dotEnvErr != nil {
-		slog.Error("Error loading .env file, exiting")
-		os.Exit(1)
-	}
+	godotenv.Load()
+	//if dotEnvErr != nil {
+	//	slog.Error("Error loading .env file, exiting")
+	//	os.Exit(1)
+	//}
 
 	// Connect to database
 	connStr := os.Getenv("DATABASE_URL")

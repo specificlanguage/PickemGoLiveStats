@@ -13,6 +13,7 @@ const (
 	Scheduled  = "SCHEDULED"
 	InProgress = "IN_PROGRESS"
 	Completed  = "COMPLETED"
+	Postponed  = "POSTPONED"
 	Unknown    = "UNKNOWN"
 )
 
@@ -45,8 +46,15 @@ type CompletedGameStats struct {
 }
 
 type UnknownGameStats struct {
-	status string
-	gameID int
+	status string `redis:"status"`
+	gameID int    `redis:"gameID"`
+}
+
+type PostponedGameStats struct {
+	Status    string `redis:"status"`
+	GameID    int    `redis:"gameID"`
+	HomeScore int    `redis:"homeScore"`
+	AwayScore int    `redis:"awayScore"`
 }
 
 // Returns true or false if the game that was just handled was finished.
@@ -78,6 +86,9 @@ func handleGameStats(gameID int, dbClient *DatabaseClient) (bool, error) {
 	case InProgress:
 		err := handleInProgressGame(gameStats, liveStats, dbClient)
 		return false, err
+	case Unknown:
+		err := handlePostponedGame(gameStats, liveStats, dbClient)
+		return true, err
 	}
 
 	return false, nil
@@ -92,18 +103,29 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 	}
 
 	code := gameStatus["statusCode"].(string)
+	firstLetter := string(code[0])
 
-	switch code {
+	switch firstLetter {
 	case "S": // Scheduled
-		return Scheduled, nil
-	case "PW": // Warmup situation
-		return Scheduled, nil
-	case "F": // Final
-		return Completed, nil
-	case "O": // Game Over (used as separate before decisions)
-		return Completed, nil
-	case "I": // In Progress
-		return InProgress, nil
+		return Scheduled, nil // Scheduled
+	case "P":
+		return Scheduled, nil // Pregame -- also accounts for delayed start
+	case "I":
+		return InProgress, nil // In Progress -- also accounts for delayed in progress
+	case "M":
+		return InProgress, nil // Manager challenge -- In progress
+	case "N":
+		return InProgress, nil // Umpire review
+	case "D":
+		return Postponed, nil // Postponed/Cancelled
+	case "T":
+		return Completed, nil // Suspended
+	case "Q":
+		return Completed, nil // Forfeit -- but is anyone ever going to use this?
+	case "O":
+		return Completed, nil // Game Over (or completed early)
+	case "F":
+		return Completed, nil // Final
 	default:
 		return Unknown, nil
 	}
@@ -252,6 +274,70 @@ func handleInProgressGame(gameStats map[string]interface{}, liveStats map[string
 
 	return nil
 
+}
+
+func handlePostponedGame(gameStats map[string]interface{}, liveStats map[string]interface{}, client *DatabaseClient) error {
+	slog.Info("Game status unknown, setting in database and skipping")
+
+	gameID, gameIDErr := unwrap(gameStats, "game")
+	if gameIDErr != nil {
+		return gameIDErr
+	}
+
+	homeScore, awayScore, scoreErr := getScores(liveStats)
+	if scoreErr != nil {
+		return scoreErr
+	}
+
+	stats := PostponedGameStats{
+		Status:    Postponed,
+		GameID:    int(gameID["pk"].(float64)),
+		HomeScore: homeScore,
+		AwayScore: awayScore,
+	}
+
+	client.redisMut.Lock()
+	defer client.redisMut.Unlock()
+	hsetErr := client.redisClient.HSet(context.Background(), "game:"+strconv.Itoa(stats.GameID), stats).Err()
+	if hsetErr != nil {
+		return hsetErr
+	}
+	expireErr := client.redisClient.Expire(context.Background(), "game:"+strconv.Itoa(stats.GameID), time.Hour*24).Err()
+	if expireErr != nil {
+		return expireErr
+	}
+
+	client.dbMut.Lock()
+	defer client.dbMut.Unlock()
+	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	tx, err := client.db.Begin(cctx)
+
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback(context.Background())
+		} else {
+			tx.Commit(context.Background())
+		}
+	}()
+
+	_, err = client.db.Exec(cctx, `
+			UPDATE games SET finished=$1, home_score=$2, away_score=$3, winner = NULL
+ 			WHERE id = $4`,
+		true, stats.HomeScore, stats.AwayScore, stats.GameID)
+
+	if err != nil {
+		return err
+	}
+
+	err = tx.Commit(context.Background())
+	return err
+
+	return nil
 }
 
 func getScores(liveData map[string]interface{}) (int, int, error) {
