@@ -302,6 +302,10 @@ func handlePostponedGame(gameStats map[string]interface{}, liveStats map[string]
 	if hsetErr != nil {
 		return hsetErr
 	}
+	expireErr := client.redisClient.Expire(context.Background(), "game:"+strconv.Itoa(stats.GameID), time.Hour*24).Err()
+	if expireErr != nil {
+		return expireErr
+	}
 
 	client.dbMut.Lock()
 	defer client.dbMut.Unlock()
