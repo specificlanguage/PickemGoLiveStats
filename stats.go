@@ -102,23 +102,29 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 		return "", gameStatusErr
 	}
 
-	code := gameStatus["statusCode"].(string)
+	code := gameStatus["statusCode"].(string)[0]
 
-	switch code {
+	switch strconv.Itoa(int(code)) {
 	case "S": // Scheduled
-		return Scheduled, nil
+		return Scheduled, nil // Scheduled
 	case "P":
-		return Scheduled, nil // Pregame
-	case "PW": // Warmup situation
-		return Scheduled, nil
-	case "DR":
-		return Postponed, nil // Delayed/Postponed
-	case "F": // Final
-		return Completed, nil
-	case "O": // Game Over (used as separate before decisions)
-		return Completed, nil
-	case "I": // In Progress
-		return InProgress, nil
+		return Scheduled, nil // Pregame -- also accounts for delayed start
+	case "I":
+		return InProgress, nil // In Progress -- also accounts for delayed in progress
+	case "M":
+		return InProgress, nil // Manager challenge -- In progress
+	case "N":
+		return InProgress, nil // Umpire review
+	case "D":
+		return Postponed, nil // Postponed/Cancelled
+	case "T":
+		return Completed, nil // Suspended
+	case "Q":
+		return Completed, nil // Forfeit -- but is anyone ever going to use this?
+	case "O":
+		return Completed, nil // Game Over (or completed early)
+	case "F":
+		return Completed, nil // Final
 	default:
 		return Unknown, nil
 	}
