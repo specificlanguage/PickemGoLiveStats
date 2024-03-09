@@ -102,9 +102,10 @@ func getGameType(gameStats map[string]interface{}) (string, error) {
 		return "", gameStatusErr
 	}
 
-	code := gameStatus["statusCode"].(string)[0]
+	code := gameStatus["statusCode"].(string)
+	firstLetter := string(code[0])
 
-	switch strconv.Itoa(int(code)) {
+	switch firstLetter {
 	case "S": // Scheduled
 		return Scheduled, nil // Scheduled
 	case "P":
